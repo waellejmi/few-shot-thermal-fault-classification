@@ -193,6 +193,7 @@ def episodic_collate(batch):
 def setup_fsl_train_test_dataloaders(
     data_path, 
     transform=None, 
+    target_transform=None,
     train_classes=None,
     test_classes=None,
     train_ratio=0.7,
@@ -227,7 +228,8 @@ def setup_fsl_train_test_dataloaders(
     # Create full dataset
     full_dataset = ThermicMotorsImagesDataset(
         root=data_path,
-        transform=transform
+        transform=transform,
+        target_transform=target_transform
     )
     
     # Count samples per class
@@ -341,3 +343,182 @@ def setup_fsl_train_test_dataloaders(
     )
     
     return train_loader, test_loader, full_dataset, (train_n_way, test_n_way)
+
+# #OPTION2
+# def setup_fsl_train_test_dataloaders(
+#     data_path, 
+#     train_transform=None, 
+#     test_transform=None,
+#     target_transform=None,
+#     train_classes=None,
+#     test_classes=None,
+#     train_ratio=0.7,
+#     n_way=5, 
+#     k_shot=1, 
+#     q_query=5, 
+#     train_episodes=100, 
+#     test_episodes=50,
+#     random_seed=42
+# ):
+#     """
+#     Creates separate dataloaders for training and testing
+#     with disjoint classes to evaluate true few-shot learning.
+#     Uses different transforms for training and testing.
+    
+#     Args:
+#         data_path: Path to dataset
+#         train_transform: Image transforms for training
+#         test_transform: Image transforms for testing
+#         target_transform: Transform to apply to the labels (not image transforms)
+#         train_classes: List of class names for training (optional)
+#         test_classes: List of class names for testing (optional)
+#         train_ratio: Ratio of classes to use for training if train_classes/test_classes not provided
+#         n_way, k_shot, q_query: Few-shot learning parameters
+#         train_episodes: Number of episodes for training
+#         test_episodes: Number of episodes for testing
+#         random_seed: For reproducible class splits
+#     """
+
+    
+#     # Set default transforms if not provided
+#     if train_transform is None:
+#         train_transform = thermic_transformer
+    
+#     if test_transform is None:
+#         test_transform = thermic_transformer
+
+#     # Set random seed for reproducibility
+#     random.seed(random_seed)
+    
+#     # Create a temporary dataset to get class information
+#     # We use a common dataset just to get the class info and counts
+#     temp_dataset = ThermicMotorsImagesDataset(
+#         root=data_path,
+#         transform=None,  # No transform needed for just getting class info
+#         target_transform=None
+#     )
+    
+#     # Count samples per class
+#     class_counts = defaultdict(int)
+#     for label in temp_dataset.labels:
+#         class_counts[label] += 1
+    
+#     print(f"Dataset class distribution: {dict(class_counts)}")
+    
+#     # Find classes with enough examples for (k_shot + q_query)
+#     min_samples_needed = k_shot + q_query
+#     valid_class_idx = [cls_idx for cls_idx, count in class_counts.items() 
+#                        if count >= min_samples_needed]
+    
+#     # Map back to class names
+#     idx_to_class = {idx: cls for cls, idx in temp_dataset.class_to_idx.items()}
+#     valid_classes = [idx_to_class[idx] for idx in valid_class_idx]
+    
+#     print(f"Found {len(valid_classes)} valid classes with at least {min_samples_needed} samples each")
+    
+#     # Check if we have enough classes for n_way classification
+#     if len(valid_classes) < n_way:
+#         raise ValueError(f"Only {len(valid_classes)} classes have enough samples. "
+#                          f"Cannot perform {n_way}-way classification. "
+#                          f"Reduce n_way or add more data.")
+    
+#     # If classes aren't explicitly provided, split valid classes automatically
+#     if train_classes is None or test_classes is None:
+#         # Shuffle classes and split
+#         shuffled_classes = random.sample(valid_classes, len(valid_classes))
+        
+#         # Ensure we have enough classes for both training and testing
+#         n_train = max(int(len(shuffled_classes) * train_ratio), n_way)
+        
+#         # Make sure we don't assign more classes than available
+#         if n_train > len(shuffled_classes) - n_way:
+#             n_train = len(shuffled_classes) - n_way  # Ensure test gets at least n_way
+        
+#         train_classes = shuffled_classes[:n_train]
+#         test_classes = shuffled_classes[n_train:n_train + min(len(shuffled_classes) - n_train, len(shuffled_classes))]
+        
+#         # Ensure we have at least n_way classes for testing
+#         if len(test_classes) < n_way:
+#             # Move some classes from train to test if needed
+#             classes_to_move = n_way - len(test_classes)
+#             test_classes.extend(train_classes[-classes_to_move:])
+#             train_classes = train_classes[:-classes_to_move]
+        
+#         print(f"Automatically split classes:")
+#         print(f"  Training classes ({len(train_classes)}): {', '.join(train_classes)}")
+#         print(f"  Testing classes ({len(test_classes)}): {', '.join(test_classes)}")
+    
+#     # Convert class names to indices
+#     train_class_indices = [temp_dataset.class_to_idx[cls] for cls in train_classes]
+#     test_class_indices = [temp_dataset.class_to_idx[cls] for cls in test_classes]
+    
+#     # Filter indices for training and testing
+#     train_indices = [i for i, label in enumerate(temp_dataset.labels) 
+#                      if label in train_class_indices]
+#     test_indices = [i for i, label in enumerate(temp_dataset.labels) 
+#                     if label in test_class_indices]
+    
+#     # Extract labels for these indices
+#     train_labels = [temp_dataset.labels[i] for i in train_indices]
+#     test_labels = [temp_dataset.labels[i] for i in test_indices]
+    
+#     # Print class distribution in each split
+#     train_label_counts = Counter(train_labels)
+#     test_label_counts = Counter(test_labels)
+    
+#     print(f"Training class distribution: {dict(train_label_counts)}")
+#     print(f"Testing class distribution: {dict(test_label_counts)}")
+    
+#     # Create train and test datasets with appropriate transforms
+#     train_dataset = ThermicMotorsImagesDataset(
+#         root=data_path,
+#         transform=train_transform,
+#         target_transform=target_transform
+#     )
+    
+#     test_dataset = ThermicMotorsImagesDataset(
+#         root=data_path,
+#         transform=test_transform,
+#         target_transform=target_transform
+#     )
+    
+#     # Create samplers
+#     train_n_way = min(n_way, len(train_classes))
+#     test_n_way = min(n_way, len(test_classes))
+    
+#     print(f"Using n_way={train_n_way} for training, n_way={test_n_way} for testing")
+    
+#     train_sampler = EpisodicSampler(
+#         labels=train_labels,
+#         n_way=train_n_way,
+#         k_shot=k_shot,
+#         q_query=q_query,
+#         num_episodes=train_episodes
+#     )
+    
+#     test_sampler = EpisodicSampler(
+#         labels=test_labels,
+#         n_way=test_n_way,
+#         k_shot=k_shot,
+#         q_query=q_query,
+#         num_episodes=test_episodes   
+#     )
+    
+#     # Create dataloaders
+#     train_loader = torch.utils.data.DataLoader(
+#         train_dataset,
+#         batch_sampler=train_sampler,
+#         collate_fn=episodic_collate,
+#         num_workers=os.cpu_count()
+#     )
+    
+#     test_loader = torch.utils.data.DataLoader(
+#         test_dataset,
+#         batch_sampler=test_sampler,
+#         collate_fn=episodic_collate,
+#         num_workers=os.cpu_count()
+#     )
+    
+#     return train_loader, test_loader, (train_dataset, test_dataset), (train_n_way, test_n_way)
+
+

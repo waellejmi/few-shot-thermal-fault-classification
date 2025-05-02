@@ -1,4 +1,6 @@
 from tqdm.auto import tqdm
+from torch.utils.tensorboard import SummaryWriter
+
 import torch
 
 def prototypical_loss(query_embeddings, support_embeddings, query_labels, support_labels, n_way):
@@ -30,7 +32,7 @@ def prototypical_loss(query_embeddings, support_embeddings, query_labels, suppor
     logits = -dists / temperature
     
     # Compute predictions and accuracy
-    with torch.no_grad():
+    with torch.inference_mode():
         preds = torch.argmin(dists, dim=1)
         accuracy = (preds == query_labels).float().mean().item()
     
@@ -56,9 +58,8 @@ def train_step(model, dataloader, optimizer, n_way,device):
     
 
     
-    pbar = tqdm(enumerate(dataloader), total=len(dataloader), desc="Training")
 
-    for batch_idx, (support_images, support_labels, query_images, query_labels) in pbar:
+    for batch_idx, (support_images, support_labels, query_images, query_labels) in enumerate(dataloader):
         # # Move to device
         support_images = support_images.to(device)
         support_labels = support_labels.to(device)
@@ -87,13 +88,7 @@ def train_step(model, dataloader, optimizer, n_way,device):
         epoch_loss += loss.item()
         epoch_acc += accuracy
 
-        # Update progress bar
-        pbar.set_postfix({
-            'batch': batch_idx,
-            'loss': f'{loss.item():.4f}',
-            'acc': f'{accuracy:.4f}'
-        })
-    
+
     
      # Average metrics
     num_batches = len(dataloader)
@@ -111,9 +106,8 @@ def test_step(model, dataloader, n_way,device):
     
     # Use torch.no_grad to disable gradient calculation during inference
     with torch.inference_mode():
-        pbar = tqdm(enumerate(dataloader), total=len(dataloader), desc="Testing")
         
-        for batch_idx, (support_images, support_labels, query_images, query_labels) in pbar:
+        for batch_idx, (support_images, support_labels, query_images, query_labels) in  enumerate(dataloader):
             
             support_images = support_images.to(device)
             support_labels = support_labels.to(device)
@@ -136,12 +130,8 @@ def test_step(model, dataloader, n_way,device):
             test_loss += loss.item()
             test_acc += accuracy
             
-            # Update progress bar
-            pbar.set_postfix({
-                'batch': batch_idx,
-                'loss': f'{loss.item():.4f}',
-                'acc': f'{accuracy:.4f}'
-            })
+    
+      
     
     # Average metrics
     num_batches = len(dataloader)
@@ -158,6 +148,7 @@ def train_prototype_network(
     n_way,
     device,
     epochs=10, 
+    writer=SummaryWriter(),  # Optional: TensorBoard writer
     patience=5  # For early stopping
 ):
     """
@@ -172,15 +163,17 @@ def train_prototype_network(
         "test_acc": []
     }
     
-    # For early stopping
+    # For early stopping    
     best_test_acc = 0
     counter = 0
     
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
+    # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
 
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+
+    epoch_pbar = tqdm(range(epochs), desc="Training Progress")
     # Loop through training for the number of epochs
-    for epoch in range(epochs):
-        print(f"\nEpoch {epoch+1}/{epochs}")
+    for epoch in epoch_pbar:
         
         # Training step
         train_loss, train_acc = train_step(
@@ -198,13 +191,15 @@ def train_prototype_network(
             n_way=n_way,
             device=device
         )
-        
-        # Print results
-        print(
-            f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.4f} | "
-            f"Test Loss: {test_loss:.4f} | Test Acc: {test_acc:.4f}"
-        )
-        
+      
+        if epoch % 5 == 0:
+            print(f"\nEpoch {epoch+1}/{epochs}")
+            # Print results
+            print(
+                f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.4f} | "
+                f"Test Loss: {test_loss:.4f} | Test Acc: {test_acc:.4f}"
+            )
+            
         # Update results dictionary
         results["train_loss"].append(train_loss)
         results["train_acc"].append(train_acc)
@@ -213,6 +208,23 @@ def train_prototype_network(
    
 
     scheduler.step()
+
+
+    if writer:
+        # Add results to SummaryWriter
+        writer.add_scalars(main_tag="Loss", 
+                           tag_scalar_dict={"train_loss": train_loss,
+                                            "test_loss": test_loss},
+                           global_step=epoch)
+        writer.add_scalars(main_tag="Accuracy", 
+                           tag_scalar_dict={"train_acc": train_acc,
+                                            "test_acc": test_acc}, 
+                           global_step=epoch)
+        # Close the writer
+        writer.close()
+    else:
+        pass
+    ### End new ###
    
     ## SAVING BEST MODEL WILL FIX LATER    
     # Check for overfitting and early stopping
@@ -220,8 +232,7 @@ def train_prototype_network(
         best_test_acc = test_acc
         counter = 0
         # Save the best model
-        torch.save(model.state_dict(), "best_prototypical_model.pth")
-        print(f"New best model saved with test accuracy: {test_acc:.4f}")
+        print(f" epoch {epoch} with best test accuracy: {test_acc:.4f}")
     else:
         counter += 1
         if counter >= patience:
@@ -229,5 +240,4 @@ def train_prototype_network(
             return results
     
     # Load the best model
-    model.load_state_dict(torch.load("best_prototypical_model.pth"))
     return results

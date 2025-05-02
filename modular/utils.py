@@ -5,6 +5,9 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import random
 from typing import Tuple, Dict, List
+from torch.utils.tensorboard import SummaryWriter
+from datetime import datetime
+
 
 
 def walk_through_dir(dir_path):
@@ -116,6 +119,15 @@ def plot_training_results(results):
 
 
 
+def create_writer(experiment_name: str, model_name: str, extra: str = None):
+    """Creates a SummaryWriter instance saving to a specific log_dir."""
+    timestamp = datetime.now().strftime("%Y-%m-%d")  # Current date in YYYY-MM-DD format
+    if extra:
+        log_dir = os.path.join("runs", timestamp, experiment_name, model_name, extra)
+    else:
+        log_dir = os.path.join("runs", timestamp, experiment_name, model_name)
+    print(f"[INFO] Created SummaryWriter, saving to: {log_dir}...")
+    return SummaryWriter(log_dir=log_dir)
 
 def save_model(model: torch.nn.Module,
                target_dir: str,
