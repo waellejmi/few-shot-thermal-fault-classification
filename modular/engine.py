@@ -3,6 +3,8 @@ from torch.utils.tensorboard import SummaryWriter
 
 import torch
 
+from modular.utils import save_model
+
 def prototypical_loss(query_embeddings, support_embeddings, query_labels, support_labels, n_way):
     """
     Calculates the prototypical loss as described in the paper.
@@ -147,9 +149,12 @@ def train_prototype_network(
     optimizer, 
     n_way,
     device,
-    epochs=10, 
+    epochs, 
+    model_name=f"ResNet18.pth",
+    start_epoch=0,            
     writer=SummaryWriter(),  # Optional: TensorBoard writer
-    patience=5  # For early stopping
+    patience=14,  # For early stopping
+     
 ):
     """
     Training function for Prototypical Network with testing
@@ -169,9 +174,9 @@ def train_prototype_network(
     
     # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
 
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,T_max=epochs)
 
-    epoch_pbar = tqdm(range(epochs), desc="Training Progress")
+    epoch_pbar = tqdm(range(start_epoch,epochs), desc="Training Progress")
     # Loop through training for the number of epochs
     for epoch in epoch_pbar:
         
@@ -205,10 +210,28 @@ def train_prototype_network(
         results["train_acc"].append(train_acc)
         results["test_loss"].append(test_loss)
         results["test_acc"].append(test_acc)
-   
 
-    scheduler.step()
-
+        scheduler.step()
+        ## SAVING BEST MODEL WILL FIX LATER    
+        # Check for overfitting and early stopping
+        if test_acc > best_test_acc:
+            best_test_acc = test_acc
+            counter = 0
+            # SAVE THE NEW BEST MODEL HERE
+            save_model(
+                model=model,
+                optimizer=optimizer,
+                scheduler=scheduler,
+                epoch=epoch,
+                target_dir=r"C:\Users\Wael\Code\FSL\models",
+                model_name=model_name
+            )
+            print(f"[INFO] New best model (acc={test_acc:.4f}) saved at epoch {epoch+1}")
+        else:
+            counter += 1
+            if counter >= patience:
+                print(f"Early stopping triggered after {epoch+1} epochs")
+                break
 
     if writer:
         # Add results to SummaryWriter
@@ -224,20 +247,5 @@ def train_prototype_network(
         writer.close()
     else:
         pass
-    ### End new ###
-   
-    ## SAVING BEST MODEL WILL FIX LATER    
-    # Check for overfitting and early stopping
-    if test_acc > best_test_acc:
-        best_test_acc = test_acc
-        counter = 0
-        # Save the best model
-        print(f" epoch {epoch} with best test accuracy: {test_acc:.4f}")
-    else:
-        counter += 1
-        if counter >= patience:
-            print(f"Early stopping triggered after {epoch+1} epochs")
-            return results
-    
-    # Load the best model
+
     return results
