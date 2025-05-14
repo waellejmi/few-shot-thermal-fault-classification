@@ -66,7 +66,7 @@ def display_random_images(dataset: torch.utils.data.dataset.Dataset,
         random.seed(seed)
     
     random_samples_idx = random.sample(range(len(dataset)), k=n)
-    plt.figure(figsize=(16, 8))
+    plt.figure(figsize=(30, 15))
     
     for i, targ_sample in enumerate(random_samples_idx):
         targ_image, targ_label = dataset[targ_sample][0], dataset[targ_sample][1]
@@ -129,35 +129,6 @@ def create_writer(experiment_name: str, model_name: str, extra: str = None):
     print(f"[INFO] Created SummaryWriter, saving to: {log_dir}...")
     return SummaryWriter(log_dir=log_dir)
 
-# def save_model(model: torch.nn.Module,
-#                target_dir: str,
-#                model_name: str):
-#     """Saves a PyTorch model to a target directory.
-
-#     Args:
-#     model: A target PyTorch model to save.
-#     target_dir: A directory for saving the model to.
-#     model_name: A filename for the saved model. Should include
-#       either ".pth" or ".pt" as the file extension.
-
-#     Example usage:
-#     save_model(model=model_0,
-#                target_dir="models",
-#                model_name="05_going_modular_tingvgg_model.pth")
-#     """
-#     # Create target directory
-#     target_dir_path = Path(target_dir)
-#     target_dir_path.mkdir(parents=True,
-#                         exist_ok=True)
-
-#     # Create model save path
-#     assert model_name.endswith(".pth") or model_name.endswith(".pt"), "model_name should end with '.pt' or '.pth'"
-#     model_save_path = target_dir_path / model_name
-
-#     # Save the model state_dict()
-#     print(f"[INFO] Saving model to: {model_save_path}")
-#     torch.save(obj=model.state_dict(),
-#              f=model_save_path) 
 
 def save_model(model: torch.nn.Module,
                optimizer: torch.optim.Optimizer,
